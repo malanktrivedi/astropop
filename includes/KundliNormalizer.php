@@ -8,6 +8,7 @@ final class KundliNormalizer
     {
         $planetObjects = $this->findPlanetObjects($planetPayload);
         $ascendant = $this->findFirstObjectWithKey($ascendantPayload, 'ascendant');
+        if ($ascendant === null) $ascendant = $this->findNamedPlanet($planetObjects, 'ascendant');
 
         $planets = [];
         $moon = null;
@@ -81,6 +82,15 @@ final class KundliNormalizer
         };
         $walk($payload);
         return $found;
+    }
+
+    /** @param list<array<string,mixed>> $objects */
+    private function findNamedPlanet(array $objects, string $name): ?array
+    {
+        foreach ($objects as $object) {
+            if (strcasecmp(trim((string) ($object['name'] ?? '')), $name) === 0) return $object;
+        }
+        return null;
     }
 
     /** @return array<string,mixed>|null */
