@@ -47,6 +47,34 @@ final class KundliNormalizer
         $rashi = $moon['rashi'] ?? $this->findFirstScalar($planetPayload, ['rashi', 'rasi', 'zodiac', 'zodiac_name']);
         $nakshatra = $moon['nakshatra'] ?? $this->findFirstScalar($planetPayload, ['nakshatra', 'nakshatra_name']);
 
+        /* Persist a stable, normalized Ascendant object for D9/D10 and future varga charts. */
+        $ascendantData = $ascendant;
+        if ($ascendantData !== null) {
+            $ascendantRashi = $this->firstNonEmpty([
+                $ascendantData['rashi'] ?? null,
+                $ascendantData['rasi'] ?? null,
+                $ascendantData['zodiac'] ?? null,
+                $ascendantData['zodiac_name'] ?? null,
+                is_string($lagna) ? $lagna : null,
+            ]);
+            $ascendantRashiNo = $this->firstNonEmpty([
+                $ascendantData['rashi_no'] ?? null,
+                $ascendantData['rasi_no'] ?? null,
+                $ascendantData['zodiac_no'] ?? null,
+                $ascendantData['sign_no'] ?? null,
+            ]);
+            if ($ascendantRashi === null && $ascendantRashiNo !== null) $ascendantRashi = $this->zodiacFromNumber($ascendantRashiNo);
+
+            $ascendantData = [
+                'name' => 'Ascendant',
+                'rashi' => $ascendantRashi,
+                'rashi_no' => $ascendantRashiNo,
+                'local_degree' => $this->findFirstNumeric($ascendant, ['local_degree','degree_in_sign','sign_degree','degree']),
+                'global_degree' => $this->findFirstNumeric($ascendant, ['global_degree','longitude','sidereal_longitude','absolute_degree']),
+                'raw' => $ascendant,
+            ];
+        }
+
         $houses = [];
         foreach ($planets as $planet) {
             $house = $planet['house'];
@@ -67,7 +95,7 @@ final class KundliNormalizer
             'planetary_data' => $planets,
             'house_data' => $houses,
             'dasha_data' => $dasha,
-            'chart_data' => ['ascendant' => $ascendant, 'planet_count' => count($planets)],
+            'chart_data' => ['ascendant' => $ascendantData, 'planet_count' => count($planets)],
         ];
     }
 
@@ -125,6 +153,19 @@ final class KundliNormalizer
         };
         $walk($payload);
         return $found;
+    }
+
+    private function findFirstNumeric(mixed $value, array $keys): ?float
+    {
+        if (!is_array($value)) return null;
+        foreach ($keys as $key) {
+            if (array_key_exists($key, $value) && is_numeric($value[$key])) return (float) $value[$key];
+        }
+        foreach ($value as $child) {
+            $found = $this->findFirstNumeric($child, $keys);
+            if ($found !== null) return $found;
+        }
+        return null;
     }
 
     private function firstNonEmpty(array $values): mixed
