@@ -1,0 +1,18 @@
+<?php
+declare(strict_types=1);
+require_once __DIR__ . '/../includes/bootstrap.php';
+requireLogin();
+
+$uid = current_user_id();
+$stmt = db()->prepare('SELECT name, email FROM users WHERE id = ? LIMIT 1');
+$stmt->bind_param('i', $uid); $stmt->execute(); $user = $stmt->get_result()->fetch_assoc(); $stmt->close();
+
+$stmt = db()->prepare('SELECT id, profile_name, full_name, date_of_birth, time_of_birth, birth_place, latitude, longitude, timezone FROM birth_profiles WHERE user_id = ? ORDER BY id DESC LIMIT 1');
+$stmt->bind_param('i', $uid); $stmt->execute(); $profile = $stmt->get_result()->fetch_assoc(); $stmt->close();
+
+$stmt = db()->prepare('SELECT id FROM kundli_calculations WHERE user_id = ? ORDER BY id DESC LIMIT 1');
+$stmt->bind_param('i', $uid); $stmt->execute(); $kundli = $stmt->get_result()->fetch_assoc(); $stmt->close();
+
+$apiConfigured = VEDIC_API_KEY !== '';
+?>
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Dashboard — ASTROPOP</title><link rel="stylesheet" href="<?= e(APP_BASE_PATH) ?>/assets/css/app.css"></head><body><main class="app-shell"><header class="topbar"><a class="brand" href="<?= e(APP_BASE_PATH) ?>/dashboard.php">✦ ASTROPOP</a><nav><a href="<?= e(APP_BASE_PATH) ?>/birth/">Birth profile</a><a href="<?= e(APP_BASE_PATH) ?>/logout.php">Log out</a></nav></header><section class="content-wrap"><div class="section-heading"><p class="eyebrow">YOUR ASTROLOGY HOME</p><h1>Good to see you, <?= e((string) ($user['name'] ?? 'there')) ?>.</h1><p class="muted">Your personalized astrology companion starts with accurate birth data.</p></div><section class="grid-2"><article class="card"><p class="eyebrow">ACCOUNT</p><h2><?= e((string) ($user['name'] ?? '')) ?></h2><p class="muted"><?= e((string) ($user['email'] ?? '')) ?></p><span class="pill">Active account</span></article><article class="card"><p class="eyebrow">ASTROLOGY API</p><h2><?= $apiConfigured ? 'Configured' : 'Configuration pending' ?></h2><p class="muted">Server-side VedicAstroAPI connection status.</p><span class="pill <?= $apiConfigured ? 'pill-success' : '' ?>"><?= $apiConfigured ? 'Ready for test' : 'Add VEDIC_API_KEY' ?></span></article></section><section class="card"><div class="row-between"><div><p class="eyebrow">BIRTH PROFILE</p><h2><?= $profile ? e((string) $profile['profile_name']) : 'Your Kundli starts here' ?></h2></div><?php if (!$profile): ?><a class="button button-primary" href="<?= e(APP_BASE_PATH) ?>/birth/">Add birth details</a><?php endif; ?></div><?php if ($profile): ?><div class="detail-grid"><div><span>Date</span><strong><?= e((string) $profile['date_of_birth']) ?></strong></div><div><span>Time</span><strong><?= e((string) ($profile['time_of_birth'] ?? 'Unknown')) ?></strong></div><div><span>Place</span><strong><?= e((string) $profile['birth_place']) ?></strong></div><div><span>Location</span><strong><?= $profile['latitude'] !== null ? 'Resolved' : 'Pending resolution' ?></strong></div></div><p class="muted">Kundli status: <strong><?= $kundli ? 'Generated' : 'Not generated yet' ?></strong></p><?php else: ?><p class="muted">Your Kundli has not been generated yet. Add your birth details to continue.</p><?php endif; ?></section></section></main></body></html>
