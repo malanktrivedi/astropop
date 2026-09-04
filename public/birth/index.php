@@ -72,13 +72,13 @@ if (is_post()) {
         $lon = filter_var($_POST['longitude'] ?? null, FILTER_VALIDATE_FLOAT, FILTER_NULL_ON_FAILURE);
         $tz = filter_var($_POST['timezone_offset'] ?? null, FILTER_VALIDATE_FLOAT, FILTER_NULL_ON_FAILURE);
         $name = trim((string) ($_POST['location_name'] ?? ''));
-        if (!$lat || $lat < -90 || $lat > 90 || !$lon || $lon < -180 || $lon > 180 || $tz === null || $tz < -14 || $tz > 14 || $name === '') {
+        if ($lat === null || $lat < -90 || $lat > 90 || $lon === null || $lon < -180 || $lon > 180 || $tz === null || $tz < -14 || $tz > 14 || $name === '') {
             $errors[] = 'Select a valid location returned by the astrology service.';
         } else {
             $stmt = db()->prepare('UPDATE birth_profiles SET location_name = ?, latitude = ?, longitude = ?, timezone = ? WHERE id = ? AND user_id = ?');
             $tzString = (string) $tz;
             $stmt->bind_param('sddsii', $name, $lat, $lon, $tzString, $profileId, $uid);
-            if ($stmt->execute() && $stmt->affected_rows >= 0) {
+            if ($stmt->execute()) {
                 $stmt->close();
                 flash('success', 'Birth location resolved. You can now generate the Kundli.');
                 redirect('/birth/?profile_id=' . $profileId);
