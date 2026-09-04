@@ -31,41 +31,74 @@ $planetary = json_decode((string) $calculation['planetary_data'], true) ?: [];
 $chartData = json_decode((string) $calculation['chart_data'], true) ?: [];
 $apiResponse = json_decode((string) $calculation['api_response'], true) ?: [];
 
-/* Recover the exact Ascendant longitude for older cached calculations. */
-$chartAscendant = $chartData['ascendant'] ?? null;
+/* Recover the exact Ascendant data for older cached calculations. */
+$chartAscendant = is_array($chartData['ascendant'] ?? null) ? $chartData['ascendant'] : null;
 if (!d9HasLongitude($chartAscendant)) {
-    $apiAscendant = d9FindNamedObject($apiResponse['planet_details'] ?? [], 'ascendant');
-    if ($apiAscendant !== null) $chartData['ascendant'] = $apiAscendant;
+    $apiAscendant = d9FindAscendantObject($apiResponse);
+    if ($apiAscendant !== null) {
+        $chartAscendant = $apiAscendant;
+        $chartData['ascendant'] = $apiAscendant;
+    }
+}
+
+/* Last-resort recovery: use any numeric Ascendant degree present in the stored API response. */
+if (!d9HasLongitude($chartAscendant)) {
+    $ascLocal = d9FindNumericByKey($apiResponse, ['local_degree','degree_in_sign','sign_degree','degree']);
+    if ($ascLocal !== null && $calculation['lagna'] !== null) {
+        $chartData['ascendant'] = [
+            'name' => 'Ascendant',
+            'rashi' => (string) $calculation['lagna'],
+            'local_degree' => $ascLocal,
+        ];
+    }
 }
 
 $d9 = (new NavamsaCalculator())->calculate($planetary, $chartData, $calculation['lagna'] !== null ? (string) $calculation['lagna'] : null);
 
-$moonRashi = $calculation['rashi'] !== null ? (string) $calculation['rashi'] : null;
-if ($moonRashi === null || $moonRashi === '') {
+$moonRashi = $calculation['rashi'] !== null ? trim((string) $calculation['rashi']) : '';
+if ($moonRashi === '') {
     foreach ($planetary as $planet) {
         if (!is_array($planet)) continue;
-        $name = strtolower((string) ($planet['name'] ?? ''));
+        $name = strtolower((string) ($planet['name'] ?? $planet['full_name'] ?? ''));
         if (str_contains($name, 'moon')) {
-            $moonRashi = (string) ($planet['rashi'] ?? '');
-            break;
+            $moonRashi = trim((string) ($planet['rashi'] ?? ''));
+            if ($moonRashi !== '') break;
         }
     }
 }
 
 function d9HasLongitude(mixed $value): bool {
     if (!is_array($value)) return false;
-    foreach (['global_degree','longitude','sidereal_longitude','local_degree','degree_in_sign','sign_degree','degree'] as $key) {
+    foreach (['global_degree','longitude','sidereal_longitude','absolute_degree','local_degree','degree_in_sign','sign_degree','degree'] as $key) {
         if (isset($value[$key]) && is_numeric($value[$key])) return true;
     }
     return false;
 }
 
-function d9FindNamedObject(mixed $value, string $target): ?array {
+function d9FindAscendantObject(mixed $value): ?array {
     if (!is_array($value)) return null;
-    if (isset($value['name']) && is_string($value['name']) && strcasecmp(trim($value['name']), $target) === 0 && d9HasLongitude($value)) return $value;
-    foreach ($value as $child) {
-        $found = d9FindNamedObject($child, $target);
-        if ($found !== null) return $found;
+    foreach ($value as $key => $child) {
+        if (strcasecmp((string) $key, 'ascendant') === 0) {
+            if (is_array($child) && d9HasLongitude($child)) return $child;
+            if (is_numeric($child)) return ['name' => 'Ascendant', 'local_degree' => (float) $child];
+        }
+        if (is_array($child)) {
+            if (isset($child['name']) && is_string($child['name']) && strcasecmp(trim($child['name']), 'ascendant') === 0 && d9HasLongitude($child)) return $child;
+            $found = d9FindAscendantObject($child);
+            if ($found !== null) return $found;
+        }
+    }
+    return null;
+}
+
+function d9FindNumericByKey(mixed $value, array $keys): ?float {
+    if (!is_array($value)) return null;
+    foreach ($value as $key => $child) {
+        if (in_array(strtolower((string) $key), array_map('strtolower', $keys), true) && is_numeric($child)) return (float) $child;
+        if (is_array($child)) {
+            $found = d9FindNumericByKey($child, $keys);
+            if ($found !== null) return $found;
+        }
     }
     return null;
 }
