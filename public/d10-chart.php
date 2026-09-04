@@ -26,14 +26,65 @@ if (!$profile || !$calculation) { http_response_code(404); exit('Kundli not foun
 $planetary = json_decode((string) $calculation['planetary_data'], true) ?: [];
 $chartData = json_decode((string) $calculation['chart_data'], true) ?: [];
 $apiResponse = json_decode((string) $calculation['api_response'], true) ?: [];
-if (!is_array($chartData['ascendant'] ?? null) || !d10HasLongitude($chartData['ascendant'])) {
-    $apiAscendant = d10FindNamedObject($apiResponse['planet_details'] ?? [], 'ascendant');
-    if ($apiAscendant !== null) $chartData['ascendant'] = $apiAscendant;
+
+/* Recover exact Ascendant data for older cached calculations. */
+$chartAscendant = is_array($chartData['ascendant'] ?? null) ? $chartData['ascendant'] : null;
+if (!d10HasLongitude($chartAscendant)) {
+    $apiAscendant = d10FindAscendantObject($apiResponse);
+    if ($apiAscendant !== null) {
+        $chartAscendant = $apiAscendant;
+        $chartData['ascendant'] = $apiAscendant;
+    }
 }
+
+/* Last-resort recovery: use any numeric Ascendant degree in the stored response with the stored D1 Lagna. */
+if (!d10HasLongitude($chartAscendant)) {
+    $ascLocal = d10FindNumericByKey($apiResponse, ['local_degree','degree_in_sign','sign_degree','degree']);
+    if ($ascLocal !== null && $calculation['lagna'] !== null) {
+        $chartData['ascendant'] = [
+            'name' => 'Ascendant',
+            'rashi' => (string) $calculation['lagna'],
+            'local_degree' => $ascLocal,
+        ];
+    }
+}
+
 $d10 = (new DasamsaCalculator())->calculate($planetary, $chartData, $calculation['lagna'] !== null ? (string) $calculation['lagna'] : null);
 
-function d10HasLongitude(mixed $value): bool { if (!is_array($value)) return false; foreach (['global_degree','longitude','sidereal_longitude','local_degree','degree_in_sign','sign_degree','degree'] as $key) if (isset($value[$key]) && is_numeric($value[$key])) return true; return false; }
-function d10FindNamedObject(mixed $value, string $target): ?array { if (!is_array($value)) return null; if (isset($value['name']) && is_string($value['name']) && strcasecmp(trim($value['name']), $target) === 0 && d10HasLongitude($value)) return $value; foreach ($value as $child) { $found = d10FindNamedObject($child, $target); if ($found !== null) return $found; } return null; }
+function d10HasLongitude(mixed $value): bool {
+    if (!is_array($value)) return false;
+    foreach (['global_degree','longitude','sidereal_longitude','absolute_degree','local_degree','degree_in_sign','sign_degree','degree'] as $key) {
+        if (isset($value[$key]) && is_numeric($value[$key])) return true;
+    }
+    return false;
+}
+function d10FindAscendantObject(mixed $value): ?array {
+    if (!is_array($value)) return null;
+    foreach ($value as $key => $child) {
+        if (strcasecmp((string) $key, 'ascendant') === 0) {
+            if (is_array($child) && d10HasLongitude($child)) return $child;
+            if (is_numeric($child)) return ['name' => 'Ascendant', 'local_degree' => (float) $child];
+        }
+        if (is_array($child)) {
+            if (isset($child['name']) && is_string($child['name']) && strcasecmp(trim($child['name']), 'ascendant') === 0 && d10HasLongitude($child)) return $child;
+            $found = d10FindAscendantObject($child);
+            if ($found !== null) return $found;
+        }
+    }
+    return null;
+}
+function d10FindNumericByKey(mixed $value, array $keys): ?float {
+    if (!is_array($value)) return null;
+    $wanted = array_map('strtolower', $keys);
+    foreach ($value as $key => $child) {
+        if (in_array(strtolower((string) $key), $wanted, true) && is_numeric($child)) return (float) $child;
+        if (is_array($child)) {
+            $found = d10FindNumericByKey($child, $keys);
+            if ($found !== null) return $found;
+        }
+    }
+    return null;
+}
 function d10Value(mixed $value): string { return $value === null || $value === '' ? '—' : e(is_scalar($value) ? (string) $value : json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)); }
 function d10Deg(float $degree): string { $d = floor($degree); $minutes = round(($degree - $d) * 60); if ($minutes >= 60) { $d++; $minutes = 0; } return sprintf('%02d°%02d′', $d, $minutes); }
 $houses = $d10['houses'];
