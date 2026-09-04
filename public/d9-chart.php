@@ -56,13 +56,17 @@ if (!d9HasLongitude($chartAscendant)) {
 $d9 = (new NavamsaCalculator())->calculate($planetary, $chartData, $calculation['lagna'] !== null ? (string) $calculation['lagna'] : null);
 
 $moonRashi = $calculation['rashi'] !== null ? trim((string) $calculation['rashi']) : '';
-if ($moonRashi === '') {
+if ($moonRashi === '' || $moonRashi === '—' || $moonRashi === '-') {
     foreach ($planetary as $planet) {
         if (!is_array($planet)) continue;
-        $name = strtolower((string) ($planet['name'] ?? $planet['full_name'] ?? ''));
-        if (str_contains($name, 'moon')) {
-            $moonRashi = trim((string) ($planet['rashi'] ?? ''));
-            if ($moonRashi !== '') break;
+        $name = strtolower(trim((string) ($planet['name'] ?? '')));
+        $fullName = strtolower(trim((string) ($planet['full_name'] ?? '')));
+        if (in_array($name, ['moon', 'mo', 'chandra'], true) || str_contains($fullName, 'moon') || str_contains($fullName, 'chandra')) {
+            $candidate = trim((string) ($planet['rashi'] ?? ''));
+            if ($candidate !== '') {
+                $moonRashi = $candidate;
+                break;
+            }
         }
     }
 }
