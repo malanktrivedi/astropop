@@ -31,12 +31,9 @@ $planetary = json_decode((string) $calculation['planetary_data'], true) ?: [];
 $chartData = json_decode((string) $calculation['chart_data'], true) ?: [];
 $apiResponse = json_decode((string) $calculation['api_response'], true) ?: [];
 
-/*
- * Older cached calculations may have chart_data.ascendant without the
- * Ascendant longitude. The planet-details response does contain the
- * Ascendant object, so recover it here instead of guessing the D9 Lagna.
- */
-if (!is_array($chartData['ascendant'] ?? null) || !$thisHasAscendantDegree = d9HasLongitude($chartData['ascendant'])) {
+/* Recover the exact Ascendant longitude for older cached calculations. */
+$chartAscendant = $chartData['ascendant'] ?? null;
+if (!d9HasLongitude($chartAscendant)) {
     $apiAscendant = d9FindNamedObject($apiResponse['planet_details'] ?? [], 'ascendant');
     if ($apiAscendant !== null) $chartData['ascendant'] = $apiAscendant;
 }
