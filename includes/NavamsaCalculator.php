@@ -20,9 +20,9 @@ final class NavamsaCalculator
         $d9Lagna = null;
 
         $ascendant = is_array($chartData['ascendant'] ?? null) ? $chartData['ascendant'] : [];
-        $ascGlobal = $this->firstNumeric($ascendant, ['global_degree','longitude','sidereal_longitude']);
+        $ascGlobal = $this->findFirstNumeric($ascendant, ['global_degree','longitude','sidereal_longitude','absolute_degree']);
         if ($ascGlobal === null) {
-            $ascLocal = $this->firstNumeric($ascendant, ['local_degree','degree_in_sign','sign_degree','degree']);
+            $ascLocal = $this->findFirstNumeric($ascendant, ['local_degree','degree_in_sign','sign_degree','degree']);
             $ascGlobal = $this->absoluteFromSignAndLocal($d1Lagna, $ascLocal);
         }
         if ($ascGlobal !== null) $d9Lagna = $this->navamsaSignFromLongitude($ascGlobal);
@@ -127,10 +127,15 @@ final class NavamsaCalculator
         return $number ? self::SIGNS[$number - 1] : null;
     }
 
-    private function firstNumeric(array $data, array $keys): ?float
+    private function findFirstNumeric(mixed $value, array $keys): ?float
     {
+        if (!is_array($value)) return null;
         foreach ($keys as $key) {
-            if (isset($data[$key]) && is_numeric($data[$key])) return (float) $data[$key];
+            if (array_key_exists($key, $value) && is_numeric($value[$key])) return (float) $value[$key];
+        }
+        foreach ($value as $child) {
+            $found = $this->findFirstNumeric($child, $keys);
+            if ($found !== null) return $found;
         }
         return null;
     }
