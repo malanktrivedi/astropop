@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS birth_profiles (
     date_of_birth DATE NOT NULL,
     time_of_birth TIME NULL,
     birth_place VARCHAR(255) NOT NULL,
+    location_name VARCHAR(255) NULL,
     latitude DECIMAL(10,7) NULL,
     longitude DECIMAL(10,7) NULL,
     timezone VARCHAR(64) NULL,
@@ -43,10 +44,12 @@ CREATE TABLE IF NOT EXISTS kundli_calculations (
     dasha_data JSON NULL,
     chart_data JSON NULL,
     api_response JSON NULL,
+    calculation_hash CHAR(64) NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     KEY idx_kundli_user (user_id),
     KEY idx_kundli_profile (birth_profile_id),
+    UNIQUE KEY uq_kundli_profile_hash (birth_profile_id, calculation_hash),
     CONSTRAINT fk_kundli_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     CONSTRAINT fk_kundli_profile FOREIGN KEY (birth_profile_id) REFERENCES birth_profiles(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
