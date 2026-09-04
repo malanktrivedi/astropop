@@ -5,6 +5,10 @@ require_once __DIR__ . '/../includes/NorthIndianChart.php';
 require_once __DIR__ . '/../includes/SaptamsaCalculator.php';
 requireLogin();
 
+// Prevent browser/proxy caching while the divisional chart is being validated.
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
+
 $uid = current_user_id();
 $profileId = (int) ($_GET['profile_id'] ?? 0);
 if ($profileId <= 0) {
@@ -41,6 +45,18 @@ if (!d7HasLongitude($chartAscendant)) {
 
 $d7 = (new SaptamsaCalculator())->calculate($planetary, $chartData, $calculation['lagna'] !== null ? (string) $calculation['lagna'] : null);
 
+// Build chart occupancy directly from the exact positions used by the placement table.
+// This makes the visual D7 chart and D1 → D7 table use one authoritative house mapping.
+$houses = [];
+foreach ($d7['positions'] as $position) {
+    if (!isset($position['house'])) continue;
+    $house = (int) $position['house'];
+    if ($house < 1 || $house > 12) continue;
+    $houses[$house] ??= [];
+    $houses[$house][] = (string) $position['name'];
+}
+ksort($houses, SORT_NUMERIC);
+
 function d7HasLongitude(mixed $value): bool { if (!is_array($value)) return false; foreach (['global_degree','longitude','sidereal_longitude','absolute_degree','local_degree','degree_in_sign','sign_degree','degree'] as $key) if (isset($value[$key]) && is_numeric($value[$key])) return true; return false; }
 function d7FindAscendantObject(mixed $value): ?array {
     if (!is_array($value)) return null;
@@ -66,7 +82,6 @@ function d7FindNumericByKey(mixed $value, array $keys): ?float {
 }
 function d7Value(mixed $value): string { return $value === null || $value === '' ? '—' : e(is_scalar($value) ? (string) $value : json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)); }
 function d7Deg(float $degree): string { $d = floor($degree); $minutes = round(($degree - $d) * 60); if ($minutes >= 60) { $d++; $minutes = 0; } return sprintf('%02d°%02d′', $d, $minutes); }
-$houses = $d7['houses'];
 ?>
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>D7 Saptamsa Chart — ASTROPOP</title><link rel="stylesheet" href="<?= e(APP_BASE_PATH) ?>/assets/css/app.css"></head>
