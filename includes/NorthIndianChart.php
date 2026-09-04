@@ -2,10 +2,10 @@
 declare(strict_types=1);
 
 /**
- * Render a North Indian style D1/Rashi chart from normalized house occupancy.
+ * Render a North Indian divisional chart from normalized house occupancy.
  * Houses are fixed; signs advance counter-clockwise from the Lagna house.
  */
-function renderNorthIndianChart(array $houses, mixed $lagna): string
+function renderNorthIndianChart(array $houses, mixed $lagna, string $chartLabel = 'D1 · RASHI'): string
 {
     $signs = ['Aries','Taurus','Gemini','Cancer','Leo','Virgo','Libra','Scorpio','Sagittarius','Capricorn','Aquarius','Pisces'];
     $signNumbers = [];
@@ -17,9 +17,7 @@ function renderNorthIndianChart(array $houses, mixed $lagna): string
     if ($lagnaNo === null) $lagnaNo = 1;
 
     $houseSigns = [];
-    for ($house = 1; $house <= 12; $house++) {
-        $houseSigns[$house] = (($lagnaNo - 1 + $house - 1) % 12) + 1;
-    }
+    for ($house = 1; $house <= 12; $house++) $houseSigns[$house] = (($lagnaNo - 1 + $house - 1) % 12) + 1;
 
     $abbr = [
         'ascendant' => 'As', 'sun' => 'Su', 'moon' => 'Mo', 'mars' => 'Ma',
@@ -46,7 +44,7 @@ function renderNorthIndianChart(array $houses, mixed $lagna): string
         9 => [490, 395], 10 => [385, 300], 11 => [490, 205], 12 => [385, 110],
     ];
 
-    $svg = '<div class="north-chart-wrap"><svg class="north-chart" viewBox="0 0 600 600" role="img" aria-label="North Indian D1 Rashi chart">';
+    $svg = '<div class="north-chart-wrap"><svg class="north-chart" viewBox="0 0 600 600" role="img" aria-label="North Indian divisional chart">';
     $svg .= '<rect x="10" y="10" width="580" height="580" rx="6" class="north-chart-bg"/>';
     $svg .= '<path d="M10 10 L590 10 L590 590 L10 590 Z M300 10 L590 300 L300 590 L10 300 Z M10 10 L590 590 M590 10 L10 590" class="north-chart-line"/>';
     $svg .= '<path d="M300 10 L590 300 L300 590 L10 300 Z" class="north-chart-line north-chart-diamond"/>';
@@ -62,14 +60,14 @@ function renderNorthIndianChart(array $houses, mixed $lagna): string
         if ($items) {
             foreach (array_slice($items, 0, 5) as $item) {
                 $key = strtolower(trim((string) $item));
-                $label = $abbr[$key] ?? (mb_substr((string) $item, 0, 3));
+                $label = $abbr[$key] ?? mb_substr((string) $item, 0, 3);
                 $svg .= '<text x="' . $x . '" y="' . $lineY . '" class="north-chart-planet">' . $esc($label) . '</text>';
                 $lineY += 18;
             }
         }
     }
 
-    $svg .= '<text x="300" y="302" class="north-chart-center-label">D1 · RASHI</text>';
+    $svg .= '<text x="300" y="302" class="north-chart-center-label">' . $esc($chartLabel) . '</text>';
     $svg .= '</svg><div class="north-chart-legend"><span><b>1–12</b> = Rashi signs</span><span><b>As</b> = Ascendant</span><span>Houses read counter-clockwise</span></div></div>';
     return $svg;
 }
