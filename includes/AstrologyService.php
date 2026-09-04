@@ -11,13 +11,9 @@ final class AstrologyService
     public function resolveBirthPlace(string $city): array
     {
         $result = $this->api->request('/utilities/geo-search', 'GET', ['city' => $city, 'lang' => 'en']);
-        if (!$result['ok']) {
-            return ['ok' => false, 'status' => $result['status'], 'results' => [], 'error' => $result['error']];
-        }
+        if (!$result['ok']) return ['ok' => false, 'status' => $result['status'], 'results' => [], 'error' => $result['error']];
         $results = $this->extractGeoResults($result['data'] ?? []);
-        if (!$results) {
-            return ['ok' => false, 'status' => $result['status'], 'results' => [], 'error' => 'No matching birth location was returned by the astrology service.'];
-        }
+        if (!$results) return ['ok' => false, 'status' => $result['status'], 'results' => [], 'error' => 'No matching birth location was returned by the astrology service.'];
         return ['ok' => true, 'status' => $result['status'], 'results' => $results, 'error' => null];
     }
 
@@ -33,20 +29,22 @@ final class AstrologyService
         return $this->birthRequest('/horoscope/ascendant-report', $dob, $tob, $lat, $lon, $tz);
     }
 
+    /** @return array{ok:bool,status:int,data:array<string,mixed>|null,error:string|null} */
+    public function mahaDasha(string $dob, string $tob, float $lat, float $lon, float $tz): array
+    {
+        return $this->birthRequest('/dashas/maha-dasha', $dob, $tob, $lat, $lon, $tz);
+    }
+
     /** @return list<array<string,mixed>> */
     private function extractGeoResults(array $payload): array
     {
         $candidates = [];
         $walk = function (mixed $value) use (&$walk, &$candidates): void {
             if (!is_array($value)) return;
-            if (isset($value['coordinates']) && is_array($value['coordinates']) && count($value['coordinates']) >= 2
-                && (isset($value['name']) || isset($value['full_name']) || isset($value['alternate_name']))) {
-                $candidates[] = $value;
-            }
+            if (isset($value['coordinates']) && is_array($value['coordinates']) && count($value['coordinates']) >= 2 && (isset($value['name']) || isset($value['full_name']) || isset($value['alternate_name']))) $candidates[] = $value;
             foreach ($value as $child) $walk($child);
         };
         $walk($payload);
-
         $unique = [];
         foreach ($candidates as $item) {
             $coordinates = $item['coordinates'];
