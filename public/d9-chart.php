@@ -18,7 +18,7 @@ $stmt->bind_param('ii', $profileId, $uid); $stmt->execute(); $profile = $stmt->g
 
 $calculation = null;
 if ($profile) {
-    $stmt = db()->prepare('SELECT lagna, rashi, nakshatra, planetary_data, chart_data FROM kundli_calculations WHERE birth_profile_id = ? ORDER BY id DESC LIMIT 1');
+    $stmt = db()->prepare('SELECT id, lagna, rashi, nakshatra, planetary_data, chart_data, api_response FROM kundli_calculations WHERE birth_profile_id = ? ORDER BY id DESC LIMIT 1');
     $stmt->bind_param('i', $profileId); $stmt->execute(); $calculation = $stmt->get_result()->fetch_assoc(); $stmt->close();
 }
 
@@ -29,7 +29,49 @@ if (!$profile || !$calculation) {
 
 $planetary = json_decode((string) $calculation['planetary_data'], true) ?: [];
 $chartData = json_decode((string) $calculation['chart_data'], true) ?: [];
+$apiResponse = json_decode((string) $calculation['api_response'], true) ?: [];
+
+/*
+ * Older cached calculations may have chart_data.ascendant without the
+ * Ascendant longitude. The planet-details response does contain the
+ * Ascendant object, so recover it here instead of guessing the D9 Lagna.
+ */
+if (!is_array($chartData['ascendant'] ?? null) || !$thisHasAscendantDegree = d9HasLongitude($chartData['ascendant'])) {
+    $apiAscendant = d9FindNamedObject($apiResponse['planet_details'] ?? [], 'ascendant');
+    if ($apiAscendant !== null) $chartData['ascendant'] = $apiAscendant;
+}
+
 $d9 = (new NavamsaCalculator())->calculate($planetary, $chartData, $calculation['lagna'] !== null ? (string) $calculation['lagna'] : null);
+
+$moonRashi = $calculation['rashi'] !== null ? (string) $calculation['rashi'] : null;
+if ($moonRashi === null || $moonRashi === '') {
+    foreach ($planetary as $planet) {
+        if (!is_array($planet)) continue;
+        $name = strtolower((string) ($planet['name'] ?? ''));
+        if (str_contains($name, 'moon')) {
+            $moonRashi = (string) ($planet['rashi'] ?? '');
+            break;
+        }
+    }
+}
+
+function d9HasLongitude(mixed $value): bool {
+    if (!is_array($value)) return false;
+    foreach (['global_degree','longitude','sidereal_longitude','local_degree','degree_in_sign','sign_degree','degree'] as $key) {
+        if (isset($value[$key]) && is_numeric($value[$key])) return true;
+    }
+    return false;
+}
+
+function d9FindNamedObject(mixed $value, string $target): ?array {
+    if (!is_array($value)) return null;
+    if (isset($value['name']) && is_string($value['name']) && strcasecmp(trim($value['name']), $target) === 0 && d9HasLongitude($value)) return $value;
+    foreach ($value as $child) {
+        $found = d9FindNamedObject($child, $target);
+        if ($found !== null) return $found;
+    }
+    return null;
+}
 
 function d9Value(mixed $value): string {
     return $value === null || $value === '' ? '—' : e(is_scalar($value) ? (string) $value : json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
@@ -47,6 +89,6 @@ $houses = $d9['houses'];
 <body><main class="app-shell"><header class="topbar"><a class="brand" href="<?= e(APP_BASE_PATH) ?>/dashboard.php">✦ ASTROPOP</a><nav><a href="<?= e(APP_BASE_PATH) ?>/kundli.php?profile_id=<?= $profileId ?>">Kundli</a><a href="<?= e(APP_BASE_PATH) ?>/d1-chart.php?profile_id=<?= $profileId ?>">D1 Rashi</a><a href="<?= e(APP_BASE_PATH) ?>/logout.php">Log out</a></nav></header>
 <section class="content-wrap"><div class="section-heading"><p class="eyebrow">VEDIC ASTROLOGY · D9</p><h1>Navamsa Chart</h1><p class="muted"><?= e((string) $profile['full_name']) ?> · <?= e((string) ($profile['location_name'] ?: $profile['birth_place'])) ?> · North Indian format</p></div>
 <section class="card chart-card"><div class="row-between"><div><p class="eyebrow">NAVAMSA KUNDALI</p><h2>Navamsa Chart (D9)</h2></div><span class="pill pill-success">Calculated from D1 degrees</span></div><?= renderNorthIndianChart($houses, $d9['lagna'], 'D9 · NAVAMSA') ?><p class="muted chart-note">Each Rashi sign is divided into nine 3°20′ Navamsas. D9 signs are calculated from the stored sidereal planetary longitudes.</p></section>
-<section class="grid-2"><article class="card"><p class="eyebrow">D9 BASICS</p><div class="detail-grid detail-grid-3"><div><span>D9 Lagna</span><strong><?= d9Value($d9['lagna']) ?></strong></div><div><span>D1 Lagna</span><strong><?= d9Value($calculation['lagna']) ?></strong></div><div><span>D1 Moon Rashi</span><strong><?= d9Value($calculation['rashi']) ?></strong></div></div></article><article class="card"><p class="eyebrow">BIRTH DATA</p><div class="detail-grid detail-grid-3"><div><span>Date</span><strong><?= e((string) $profile['date_of_birth']) ?></strong></div><div><span>Time</span><strong><?= e((string) $profile['time_of_birth']) ?></strong></div><div><span>UTC</span><strong><?= d9Value($profile['timezone']) ?></strong></div></div></article></section>
+<section class="grid-2"><article class="card"><p class="eyebrow">D9 BASICS</p><div class="detail-grid detail-grid-3"><div><span>D9 Lagna</span><strong><?= d9Value($d9['lagna']) ?></strong></div><div><span>D1 Lagna</span><strong><?= d9Value($calculation['lagna']) ?></strong></div><div><span>D1 Moon Rashi</span><strong><?= d9Value($moonRashi) ?></strong></div></div></article><article class="card"><p class="eyebrow">BIRTH DATA</p><div class="detail-grid detail-grid-3"><div><span>Date</span><strong><?= e((string) $profile['date_of_birth']) ?></strong></div><div><span>Time</span><strong><?= e((string) $profile['time_of_birth']) ?></strong></div><div><span>UTC</span><strong><?= d9Value($profile['timezone']) ?></strong></div></div></article></section>
 <section class="card"><div class="row-between"><div><p class="eyebrow">NAVAMSA PLACEMENT</p><h2>Planetary D1 → D9</h2></div><a class="button button-secondary" href="<?= e(APP_BASE_PATH) ?>/d1-chart.php?profile_id=<?= $profileId ?>">D1 Rashi</a></div><div class="table-wrap"><table><thead><tr><th>Planet</th><th>D1 Rashi</th><th>D1 Degree</th><th>D9 Rashi</th><th>D9 Degree</th><th>House</th><th>Vargottama</th></tr></thead><tbody><?php foreach ($d9['positions'] as $position): ?><tr><td><strong><?= e((string) $position['name']) ?></strong></td><td><?= d9Value($position['d1_sign']) ?></td><td><?= d9Deg((float) $position['d1_degree']) ?></td><td><?= d9Value($position['d9_sign']) ?></td><td><?= d9Deg((float) $position['d9_degree']) ?></td><td><?= isset($position['house']) ? (int) $position['house'] : '—' ?></td><td><?= !empty($position['vargottama']) ? '<span class="pill pill-success">Yes</span>' : '—' ?></td></tr><?php endforeach; ?></tbody></table></div></section>
 </section></main></body></html>
