@@ -13,39 +13,38 @@ final class KundliNormalizer
         $moon = null;
         foreach ($planetObjects as $planet) {
             $name = (string) ($planet['name'] ?? $planet['full_name'] ?? '');
-            if ($name === '' || strcasecmp($name, 'ascendant') === 0) {
-                continue;
-            }
+            if ($name === '' || strcasecmp($name, 'ascendant') === 0) continue;
+
+            $rashi = $this->firstNonEmpty([$planet['rashi'] ?? null, $planet['rasi'] ?? null, $planet['zodiac'] ?? null, $planet['zodiac_name'] ?? null, $planet['rashi_name'] ?? null, $planet['rasi_name'] ?? null]);
+            $rashiNo = $this->firstNonEmpty([$planet['rashi_no'] ?? null, $planet['rasi_no'] ?? null, $planet['zodiac_no'] ?? null, $planet['sign_no'] ?? null]);
+            if ($rashi === null && $rashiNo !== null) $rashi = $this->zodiacFromNumber($rashiNo);
+            if ($rashi === null) $rashi = $this->zodiacFromGlobalDegree($planet['global_degree'] ?? null);
+
+            $nakshatra = $this->firstNonEmpty([$planet['nakshatra'] ?? null, $planet['nakshatra_name'] ?? null]);
             $normalized = [
                 'name' => $name,
                 'full_name' => $planet['full_name'] ?? $name,
                 'local_degree' => $planet['local_degree'] ?? null,
                 'global_degree' => $planet['global_degree'] ?? null,
-                'rashi_no' => $planet['rashi_no'] ?? null,
-                'rashi' => $planet['rashi'] ?? null,
-                'house' => $planet['house'] ?? null,
-                'nakshatra' => $planet['nakshatra'] ?? null,
+                'rashi_no' => $rashiNo,
+                'rashi' => $rashi,
+                'house' => $planet['house'] ?? $planet['house_no'] ?? null,
+                'nakshatra' => $nakshatra,
                 'nakshatra_no' => $planet['nakshatra_no'] ?? null,
-                'nakshatra_pada' => $planet['nakshatra_pada'] ?? null,
-                'lord' => $planet['lord'] ?? null,
+                'nakshatra_pada' => $planet['nakshatra_pada'] ?? $planet['pada'] ?? null,
+                'lord' => $planet['lord'] ?? $planet['nakshatra_lord'] ?? null,
                 'lord_status' => $planet['lord_status'] ?? null,
                 'retrograde' => $planet['retrograde'] ?? $planet['retro'] ?? null,
                 'combust' => $planet['combust'] ?? null,
                 'raw' => $planet,
             ];
             $planets[] = $normalized;
-            if (stripos($name, 'moon') !== false || stripos((string) ($planet['full_name'] ?? ''), 'moon') !== false) {
-                $moon = $normalized;
-            }
+            if (stripos($name, 'moon') !== false || stripos((string) ($planet['full_name'] ?? ''), 'moon') !== false) $moon = $normalized;
         }
 
-        $lagna = $this->firstNonEmpty([
-            $ascendant['ascendant'] ?? null,
-            $this->findFirstScalar($ascendantPayload, ['ascendant']),
-        ]);
-
-        $rashi = $moon['rashi'] ?? $this->findFirstScalar($planetPayload, ['rashi']);
-        $nakshatra = $moon['nakshatra'] ?? $this->findFirstScalar($planetPayload, ['nakshatra']);
+        $lagna = $this->firstNonEmpty([$ascendant['ascendant'] ?? null, $ascendant['rashi'] ?? null, $ascendant['rasi'] ?? null, $ascendant['zodiac'] ?? null, $this->findFirstScalar($ascendantPayload, ['ascendant'])]);
+        $rashi = $moon['rashi'] ?? $this->findFirstScalar($planetPayload, ['rashi', 'rasi', 'zodiac', 'zodiac_name']);
+        $nakshatra = $moon['nakshatra'] ?? $this->findFirstScalar($planetPayload, ['nakshatra', 'nakshatra_name']);
 
         $houses = [];
         foreach ($planets as $planet) {
@@ -57,10 +56,8 @@ final class KundliNormalizer
         }
         ksort($houses, SORT_NATURAL);
 
-        $dasha = $this->findFirstValueByKey($planetPayload, ['dasha', 'dasa', 'birth_dasha', 'current_dasha']);
-        if ($dasha === null) {
-            $dasha = $this->findFirstValueByKey($ascendantPayload, ['dasha', 'dasa', 'birth_dasha', 'current_dasha']);
-        }
+        $dasha = $this->findFirstValueByKey($planetPayload, ['dasha', 'dasa', 'birth_dasha', 'current_dasha', 'maha_dasha', 'mahadasa']);
+        if ($dasha === null) $dasha = $this->findFirstValueByKey($ascendantPayload, ['dasha', 'dasa', 'birth_dasha', 'current_dasha', 'maha_dasha', 'mahadasa']);
 
         return [
             'lagna' => $lagna,
@@ -69,10 +66,7 @@ final class KundliNormalizer
             'planetary_data' => $planets,
             'house_data' => $houses,
             'dasha_data' => $dasha,
-            'chart_data' => [
-                'ascendant' => $ascendant,
-                'planet_count' => count($planets),
-            ],
+            'chart_data' => ['ascendant' => $ascendant, 'planet_count' => count($planets)],
         ];
     }
 
@@ -82,9 +76,7 @@ final class KundliNormalizer
         $found = [];
         $walk = function (mixed $value) use (&$walk, &$found): void {
             if (!is_array($value)) return;
-            if (isset($value['name']) && is_string($value['name']) && (array_key_exists('local_degree', $value) || array_key_exists('global_degree', $value))) {
-                $found[] = $value;
-            }
+            if (isset($value['name']) && is_string($value['name']) && (array_key_exists('local_degree', $value) || array_key_exists('global_degree', $value))) $found[] = $value;
             foreach ($value as $child) $walk($child);
         };
         $walk($payload);
@@ -97,10 +89,7 @@ final class KundliNormalizer
         $found = null;
         $walk = function (mixed $value) use (&$walk, &$found, $key): void {
             if ($found !== null || !is_array($value)) return;
-            if (array_key_exists($key, $value) && is_array($value)) {
-                $found = $value;
-                return;
-            }
+            if (array_key_exists($key, $value) && is_array($value)) { $found = $value; return; }
             foreach ($value as $child) $walk($child);
         };
         $walk($payload);
@@ -120,10 +109,7 @@ final class KundliNormalizer
         $walk = function (mixed $value) use (&$walk, &$found, $wanted): void {
             if ($found !== null || !is_array($value)) return;
             foreach ($value as $key => $child) {
-                if (in_array(strtolower((string) $key), $wanted, true) && $child !== null && $child !== '') {
-                    $found = $child;
-                    return;
-                }
+                if (in_array(strtolower((string) $key), $wanted, true) && $child !== null && $child !== '') { $found = $child; return; }
                 $walk($child);
             }
         };
@@ -133,9 +119,22 @@ final class KundliNormalizer
 
     private function firstNonEmpty(array $values): mixed
     {
-        foreach ($values as $value) {
-            if ($value !== null && $value !== '') return $value;
-        }
+        foreach ($values as $value) if ($value !== null && $value !== '') return $value;
         return null;
+    }
+
+    private function zodiacFromNumber(mixed $value): ?string
+    {
+        if (!is_numeric($value)) return null;
+        $number = (int) $value;
+        if ($number < 1 || $number > 12) return null;
+        return ['Aries','Taurus','Gemini','Cancer','Leo','Virgo','Libra','Scorpio','Sagittarius','Capricorn','Aquarius','Pisces'][$number - 1];
+    }
+
+    private function zodiacFromGlobalDegree(mixed $value): ?string
+    {
+        if (!is_numeric($value)) return null;
+        $degree = fmod((float) $value + 360.0, 360.0);
+        return ['Aries','Taurus','Gemini','Cancer','Leo','Virgo','Libra','Scorpio','Sagittarius','Capricorn','Aquarius','Pisces'][(int) floor($degree / 30)];
     }
 }
