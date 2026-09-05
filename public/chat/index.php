@@ -16,12 +16,15 @@ $stmt->close();
 
 $contextReady = false;
 $context = null;
+$history = [];
 if ($profileId > 0) {
     try {
         $context = $service->buildContext($userId, $profileId);
         $contextReady = true;
+        $history = $service->history($userId, $profileId, 50);
     } catch (Throwable $e) {
         $context = null;
+        $history = [];
     }
 }
 $balance = $service->balance($userId);
@@ -34,7 +37,7 @@ $balance = $service->balance($userId);
     <title>AI Astrology Chat — ASTROPOP</title>
     <link rel="stylesheet" href="<?= e(APP_BASE_PATH) ?>/assets/css/app.css">
     <style>
-        .chat-shell{max-width:980px;margin:0 auto;padding:32px 20px}.chat-header{display:flex;justify-content:space-between;gap:20px;align-items:flex-start}.chat-balance{padding:10px 14px;border:1px solid #ddd;border-radius:999px}.chat-window{min-height:480px;margin-top:24px;border:1px solid #ddd;border-radius:20px;background:#fff;padding:24px}.chat-empty{text-align:center;padding:100px 20px;color:#667085}.chat-compose{display:flex;gap:12px;margin-top:18px}.chat-compose textarea{flex:1;min-height:56px;resize:vertical}.chat-notice{margin-top:14px;padding:12px 14px;border-radius:12px;background:#fff7e6;color:#7a4b00}.chat-context{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}.chat-chip{padding:7px 10px;border-radius:999px;background:#f3f5f7;font-size:13px}.profile-picker{margin-top:20px;max-width:420px}.profile-picker select{width:100%}
+        .chat-shell{max-width:980px;margin:0 auto;padding:32px 20px}.chat-header{display:flex;justify-content:space-between;gap:20px;align-items:flex-start}.chat-balance{padding:10px 14px;border:1px solid #ddd;border-radius:999px}.chat-window{min-height:480px;margin-top:24px;border:1px solid #ddd;border-radius:20px;background:#fff;padding:24px;display:flex;flex-direction:column;gap:14px}.chat-empty{text-align:center;padding:100px 20px;color:#667085}.chat-message{max-width:78%;padding:12px 15px;border-radius:16px;white-space:pre-wrap;word-break:break-word}.chat-message-user{align-self:flex-end;background:#e9f7f6}.chat-message-ai{align-self:flex-start;background:#f4f5f7}.chat-message-system{align-self:center;background:#fff7e6;color:#7a4b00;font-size:13px}.chat-meta{display:block;margin-top:6px;font-size:11px;opacity:.6}.chat-compose{display:flex;gap:12px;margin-top:18px}.chat-compose textarea{flex:1;min-height:56px;resize:vertical}.chat-notice{margin-top:14px;padding:12px 14px;border-radius:12px;background:#fff7e6;color:#7a4b00}.chat-context{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}.chat-chip{padding:7px 10px;border-radius:999px;background:#f3f5f7;font-size:13px}.profile-picker{margin-top:20px;max-width:420px}.profile-picker select{width:100%}
     </style>
 </head>
 <body>
@@ -73,8 +76,16 @@ $balance = $service->balance($userId);
             <div class="chat-empty"><h2>Select your birth profile</h2><p>Choose a saved profile above to start an astrology conversation.</p></div>
         <?php elseif (!$contextReady): ?>
             <div class="chat-empty"><h2>Kundli not ready</h2><p>Generate a complete Kundli for this profile before starting AI chat.</p><a class="button button-primary" href="<?= e(APP_BASE_PATH) ?>/birth/?profile_id=<?= $profileId ?>">Open birth profile</a></div>
-        <?php else: ?>
+        <?php elseif (!$history): ?>
             <div class="chat-empty"><h2>What would you like to know?</h2><p>Career, marriage, money, education, timing, yogas, dashas and more.</p></div>
+        <?php else: ?>
+            <?php foreach ($history as $message): ?>
+                <?php $sender = (string)($message['sender_type'] ?? 'system'); ?>
+                <div class="chat-message chat-message-<?= e(in_array($sender, ['user','ai','system'], true) ? $sender : 'system') ?>">
+                    <?= e((string)$message['body']) ?>
+                    <span class="chat-meta"><?= e(ucfirst($sender)) ?> · <?= e((string)$message['created_at']) ?></span>
+                </div>
+            <?php endforeach; ?>
         <?php endif; ?>
     </div>
 
