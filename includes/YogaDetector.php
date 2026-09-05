@@ -10,7 +10,7 @@ final class YogaDetector
     private const DEBILITATION=['Sun'=>'Libra','Moon'=>'Scorpio','Mars'=>'Cancer','Mercury'=>'Pisces','Jupiter'=>'Capricorn','Venus'=>'Virgo','Saturn'=>'Aries'];
     private const OWN=['Sun'=>['Leo'],'Moon'=>['Cancer'],'Mars'=>['Aries','Scorpio'],'Mercury'=>['Gemini','Virgo'],'Jupiter'=>['Sagittarius','Pisces'],'Venus'=>['Taurus','Libra'],'Saturn'=>['Capricorn','Aquarius']];
     private const KENDRA=[1,4,7,10];
-    private const TRIKONA=[1,5,9];
+    private const TRIKONA=[5,9];
     private const DUSTHANA=[6,8,12];
 
     public function detect(array $planets,?string $lagna,?array $d9=null):array
@@ -20,7 +20,8 @@ final class YogaDetector
             if(!is_array($planet))continue;
             $name=$this->planetName($planet);$sign=$this->normalizeSign((string)($planet['rashi']??''));$house=is_numeric($planet['house']??null)?(int)$planet['house']:null;
             if($name===''||$sign===null||$house===null)continue;
-            $byName[$name]=['name'=>$name,'sign'=>$sign,'house'=>$house,'degree'=>is_numeric($planet['local_degree']??null)?(float)$planet['local_degree']:null,'combust'=>$planet['combust']??null];
+            $degree=is_numeric($planet['local_degree']??null)?(float)$planet['local_degree']:null;
+            $byName[$name]=['name'=>$name,'sign'=>$sign,'house'=>$house,'degree'=>$degree,'combust'=>$planet['combust']??null];
             $byHouse[$house][]=$name;
         }
         $lords=$this->houseLords($lagna);$y=[];
@@ -56,7 +57,18 @@ final class YogaDetector
     private function yogakaraka(?string $lagna,array $byName):array
     {
         if(!$lagna)return[];$start=$this->signNumber($lagna);$out=[];
-        foreach(self::OWN as $planet=>$ownedSigns){$owned=[];foreach($ownedSigns as $sign){$n=$this->signNumber($sign);if($n)$owned[]=((($n-$start+12)%12)+1);}if(!in_array(1,$owned,true)||!array_intersect($owned,self::KENDRA)||!array_intersect($owned,self::TRIKONA))continue;$x=$byName[$planet]??null;if(!$x){$out[]=$this->result('Yogakaraka — '.$planet,'Yogakaraka','Not assessable',"$planet owns both a kendra and a trikona from $lagna, but is missing from normalized D1 data.",[$planet]);continue;}$status=$this->isDebilitated($planet,$x['sign'])?'Formed but weakened':'Formed';$reason="$planet owns both a kendra and a trikona from $lagna (houses ".implode(', ',$owned).').".($status==='Formed but weakened'?' Its natal dignity is debilitated.':'');$out[]=$this->result('Yogakaraka — '.$planet,'Yogakaraka',$status,$reason,[$planet]);}
+        foreach(self::OWN as $planet=>$ownedSigns){
+            $owned=[];
+            foreach($ownedSigns as $sign){$n=$this->signNumber($sign);if($n)$owned[]=((($n-$start+12)%12)+1);}
+            $hasKendra=(bool)array_intersect($owned,self::KENDRA);
+            $hasTrikona=(bool)array_intersect($owned,self::TRIKONA);
+            if(!$hasKendra||!$hasTrikona)continue;
+            $x=$byName[$planet]??null;
+            if(!$x){$out[]=$this->result('Yogakaraka — '.$planet,'Yogakaraka','Not assessable',"$planet owns both a kendra and a trikona from $lagna, but is missing from normalized D1 data.",[$planet]);continue;}
+            $status=$this->isDebilitated($planet,$x['sign'])?'Formed but weakened':'Formed';
+            $reason="$planet owns both a kendra and a trikona from $lagna (houses ".implode(', ',$owned).').".($status==='Formed but weakened'?' Its natal dignity is debilitated.':'');
+            $out[]=$this->result('Yogakaraka — '.$planet,'Yogakaraka',$status,$reason,[$planet]);
+        }
         return$out;
     }
 
@@ -67,7 +79,7 @@ final class YogaDetector
     private function connected(array $a,array $b):bool{if($a['house']===$b['house'])return true;if($this->planetAspects((string)$a['name'],(int)$a['house'],(int)$b['house']))return true;if($this->planetAspects((string)$b['name'],(int)$b['house'],(int)$a['house']))return true;return $this->lordsExchange($a,$b);}
     private function planetAspects(string $planet,int $from,int $to):bool{$d=$this->houseDistance($from,$to);$targets=[7];if($planet==='Mars')$targets=[4,7,8];elseif($planet==='Jupiter')$targets=[5,7,9];elseif($planet==='Saturn')$targets=[3,7,10];return in_array($d,$targets,true);}
     private function lordsExchange(array $a,array $b):bool{return(self::LORDS[$a['sign']]??null)===$b['name']&&(self::LORDS[$b['sign']]??null)===$a['name'];}
-    private function isCombust(array $p,array $all):bool{$v=$p['combust']??null;if($v===true||strtolower((string)$v)==='true'||(string)$v==='1')return true;if($v===false||strtolower((string)$v)==='false'||(string)$v==='0')return false;$s=$all['Sun']??null;if(!$s||$p['name']==='Sun'||$p['sign']!==$s['sign']||!is_numeric($p['degree'])||!is_numeric($s['degree']))return false;return abs($p['degree']-$s['degree'])<=8.0;}
+    private function isCombust(array $p,array $all):bool{$v=$p['combust']??null;if(is_bool($v))return$v;if(is_scalar($v){$s=strtolower(trim((string)$v));if($s==='true'||$s==='1'||$s==='yes')return true;if($s==='false'||$s==='0'||$s==='no'||$s==='')return false;} $sun=$all['Sun']??null;if(!$sun||$p['name']==='Sun'||$p['sign']!==$sun['sign']||!is_numeric($p['degree'])||!is_numeric($sun['degree']))return false;return abs($p['degree']-$sun['degree'])<=8.0;}
     private function houseDistance(int $from,int $to):int{return(($to-$from+12)%12)+1;}
     private function isOwn(string $p,string $s):bool{return in_array($s,self::OWN[$p]??[],true);}
     private function isExalted(string $p,string $s):bool{return(self::EXALTATION[$p]??null)===$s;}
