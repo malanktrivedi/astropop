@@ -63,8 +63,15 @@ final class AiChatService
     /** @return array<int,array<string,mixed>> */
     public function history(int $userId, int $profileId, int $limit = 50): array
     {
-        $threadId = $this->getOrCreateThread($userId, $profileId);
         $limit = max(1, min(100, $limit));
+        $stmt = db()->prepare("SELECT id FROM chat_threads WHERE user_id=? AND birth_profile_id=? AND mode='ai' AND status IN ('open','active') ORDER BY id DESC LIMIT 1");
+        $stmt->bind_param('ii', $userId, $profileId);
+        $stmt->execute();
+        $thread = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+        if (!$thread) return [];
+
+        $threadId = (int) $thread['id'];
         $stmt = db()->prepare("SELECT id,sender_type,message_type,body,metadata,created_at FROM chat_messages WHERE thread_id=? ORDER BY id DESC LIMIT {$limit}");
         $stmt->bind_param('i', $threadId);
         $stmt->execute();
@@ -99,13 +106,7 @@ final class AiChatService
         return $messageId;
     }
 
-    /**
-     * Provider call remains gated until the exact Postman AI-chat contract
-     * is confirmed. No undocumented endpoint or payload is sent.
-     *
-     * @param array<int,array<string,mixed>> $history
-     * @return array<string,mixed>
-     */
+    /** Provider call remains gated until the exact Postman AI-chat contract is confirmed. */
     public function send(int $userId, int $profileId, string $message, array $history = [], ?string $topic = null): array
     {
         $message = trim($message);
