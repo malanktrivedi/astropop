@@ -1,0 +1,5 @@
+ALTER TABLE kundli_calculations
+    ADD COLUMN engine_version VARCHAR(32) NOT NULL DEFAULT '1.0.0' AFTER calculation_hash,
+    ADD COLUMN api_version VARCHAR(32) NOT NULL DEFAULT 'v3-json' AFTER engine_version,
+    ADD COLUMN calculated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP AFTER api_version,
+    ADD COLUMN updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER calculated_at;
