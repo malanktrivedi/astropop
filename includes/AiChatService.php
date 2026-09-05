@@ -24,15 +24,35 @@ final class AiChatService
         return $this->credits->balance($userId);
     }
 
+    private function assertProfileOwnership(int $userId, int $profileId): void
+    {
+        if ($userId <= 0 || $profileId <= 0) {
+            throw new InvalidArgumentException('Invalid astrology profile.');
+        }
+
+        $stmt = db()->prepare('SELECT id FROM birth_profiles WHERE id=? AND user_id=? LIMIT 1');
+        $stmt->bind_param('ii', $profileId, $userId);
+        $stmt->execute();
+        $row = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+
+        if (!$row) {
+            throw new RuntimeException('Astrology profile was not found.');
+        }
+    }
+
     /** @return array<string,mixed> */
     public function buildContext(int $userId, int $profileId, ?string $topic = null): array
     {
+        $this->assertProfileOwnership($userId, $profileId);
         return $this->context->build($userId, $profileId, $topic);
     }
 
     /** Find or create the active AI thread for a user/profile pair. */
     public function getOrCreateThread(int $userId, int $profileId): int
     {
+        $this->assertProfileOwnership($userId, $profileId);
+
         $stmt = db()->prepare("SELECT id FROM chat_threads WHERE user_id=? AND birth_profile_id=? AND mode='ai' AND status IN ('open','active') ORDER BY id DESC LIMIT 1");
         $stmt->bind_param('ii', $userId, $profileId);
         $stmt->execute();
@@ -63,6 +83,7 @@ final class AiChatService
     /** @return array<int,array<string,mixed>> */
     public function history(int $userId, int $profileId, int $limit = 50): array
     {
+        $this->assertProfileOwnership($userId, $profileId);
         $limit = max(1, min(100, $limit));
         $stmt = db()->prepare("SELECT id FROM chat_threads WHERE user_id=? AND birth_profile_id=? AND mode='ai' AND status IN ('open','active') ORDER BY id DESC LIMIT 1");
         $stmt->bind_param('ii', $userId, $profileId);
