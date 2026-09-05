@@ -44,12 +44,27 @@ $rawApi=json_decode((string)($calc['api_response']??'{}'),true); if(!is_array($r
 $rawPlanetDetails=is_array($rawApi['planet_details']??null)?$rawApi['planet_details']:[];
 $rawAscendant=is_array($rawApi['ascendant_report']??null)?$rawApi['ascendant_report']:[];
 
-/* Older cached rows may need the same normalization used at Kundli generation. */
+/* Older cached rows may have an incomplete chart_data object. Recover only the
+ * missing Ascendant/chart metadata. Never overwrite a valid planetary_data
+ * array with a failed/empty re-normalization of an older raw API shape. */
 $needsRecovery=empty($chartData['ascendant']) || count($planetary)<5;
 if($needsRecovery && ($rawPlanetDetails||$rawAscendant)){
     $recovered=(new KundliNormalizer())->normalize($rawPlanetDetails,$rawAscendant);
-    if(!empty($recovered['planetary_data']))$planetary=$recovered['planetary_data'];
-    if(!empty($recovered['chart_data']['ascendant']))$chartData['ascendant']=$recovered['chart_data']['ascendant'];
+    if(empty($planetary) && !empty($recovered['planetary_data']) && count($recovered['planetary_data'])>=5){
+        $planetary=$recovered['planetary_data'];
+    }
+    if(empty($chartData['ascendant']) && !empty($recovered['chart_data']['ascendant'])){
+        $chartData['ascendant']=$recovered['chart_data']['ascendant'];
+    }
+}
+
+/* If an older cache still lacks chart_data.ascendant, recover the Ascendant
+ * directly from the raw API response so D9 can still be calculated. */
+if(empty($chartData['ascendant']) && $rawAscendant){
+    $recovered=(new KundliNormalizer())->normalize([], $rawAscendant);
+    if(!empty($recovered['chart_data']['ascendant'])){
+        $chartData['ascendant']=$recovered['chart_data']['ascendant'];
+    }
 }
 
 try{
