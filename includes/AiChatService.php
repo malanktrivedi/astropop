@@ -86,6 +86,7 @@ final class AiChatService
         if (mb_strlen($message)>4000) throw new InvalidArgumentException('Message is too long.');
         $context=$this->buildContext($userId,$profileId,$topic); if (!$context) throw new RuntimeException('Astrology chat context is unavailable.');
         if ($history===[]) $history=$this->history($userId,$profileId,50);
+        if ($this->coinsPerMessage > 0 && (float)$this->balance($userId) < $this->coinsPerMessage) throw new RuntimeException('Insufficient ASTRO_COIN balance.');
 
         $threadId=$this->getOrCreateThread($userId,$profileId); $usageId=$this->createUsage($threadId); $started=microtime(true); $userMessageId=0;
         try {
@@ -93,7 +94,6 @@ final class AiChatService
             $result=$this->provider->chat($context,$history,$message);
             $latency=(int)round((microtime(true)-$started)*1000);
             $aiMessageId=$this->recordMessage($userId,$profileId,'ai',$result['reply'],'text',['provider'=>'openai','model'=>$result['model'],'usage_id'=>$usageId]);
-
             $ledgerId=null;
             if ($this->coinsPerMessage>0) {
                 $charge=$this->credits->debit($userId,$this->coinsText(),'ai_chat',$usageId,'ASTROPOP AI chat message',['thread_id'=>$threadId,'message_id'=>$aiMessageId]);
