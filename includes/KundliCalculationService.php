@@ -25,7 +25,8 @@ final class KundliCalculationService
         $dobApi = (new DateTime((string) $profile['date_of_birth']))->format('d/m/Y');
         $tobApi = substr((string) $profile['time_of_birth'], 0, 5);
         $lat = (float) $profile['latitude']; $lon = (float) $profile['longitude']; $tz = (float) $profile['timezone'];
-        $hash = hash('sha256', implode('|', [$profileId, $dobApi, $tobApi, $lat, $lon, $tz, self::ENGINE_VERSION, self::API_VERSION]));
+        // Source-cache identity contains only source inputs + API version. Local engine changes must not cause paid API recalculation.
+        $hash = hash('sha256', implode('|', [$profileId, $dobApi, $tobApi, $lat, $lon, $tz, self::API_VERSION]));
 
         $planet = $this->astro->planetDetails($dobApi, $tobApi, $lat, $lon, $tz);
         if (!$planet['ok']) return ['ok'=>false,'calculation_id'=>null,'hash'=>$hash,'warnings'=>[],'error'=>'Kundli planet calculation failed: ' . (string) $planet['error']];
