@@ -34,8 +34,15 @@ try {
     $service->send($userId, $profileId, $message);
     header('Location: ' . APP_BASE_PATH . '/chat/?profile_id=' . $profileId);
     exit;
-} catch (Throwable $e) {
+} catch (InvalidArgumentException $e) {
+    http_response_code(422);
+    exit(e($e->getMessage()));
+} catch (RuntimeException $e) {
     app_error_log('AI chat request failed', ['message' => $e->getMessage(), 'user_id' => $userId, 'profile_id' => $profileId]);
     http_response_code(503);
-    exit('AI chat is not available yet. The provider contract still needs to be configured.');
+    exit('AI chat could not be completed. Please check your ASTRO_COIN balance and try again.');
+} catch (Throwable $e) {
+    app_error_log('AI chat unexpected failure', ['message' => $e->getMessage(), 'user_id' => $userId, 'profile_id' => $profileId]);
+    http_response_code(500);
+    exit('AI chat encountered an unexpected error.');
 }
