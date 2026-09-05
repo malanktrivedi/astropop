@@ -39,31 +39,37 @@ if (!$profile || !$calc) {
 $profileId=(int)$profile['id'];
 $planetary=json_decode((string)($calc['planetary_data']??'[]'),true); if(!is_array($planetary))$planetary=[];
 $chartData=json_decode((string)($calc['chart_data']??'{}'),true); if(!is_array($chartData))$chartData=[];
-
 $rawApi=json_decode((string)($calc['api_response']??'{}'),true); if(!is_array($rawApi))$rawApi=[];
 $rawPlanetDetails=is_array($rawApi['planet_details']??null)?$rawApi['planet_details']:[];
 $rawAscendant=is_array($rawApi['ascendant_report']??null)?$rawApi['ascendant_report']:[];
 
-/* Older cached rows may have an incomplete chart_data object. Recover only the
- * missing Ascendant/chart metadata. Never overwrite a valid planetary_data
- * array with a failed/empty re-normalization of an older raw API shape. */
-$needsRecovery=empty($chartData['ascendant']) || count($planetary)<5;
+/* Older cached rows may have incomplete chart_data or planetary normalization.
+ * Recover missing pieces without replacing valid stored planetary data with an
+ * empty/incompatible raw response. */
+$storedAscendant=is_array($chartData['ascendant']??null)?$chartData['ascendant']:[];
+$ascendantHasDegree=(is_numeric($storedAscendant['global_degree']??null)||is_numeric($storedAscendant['local_degree']??null));
+$needsRecovery=empty($storedAscendant)||!$ascendantHasDegree||count($planetary)<5;
 if($needsRecovery && ($rawPlanetDetails||$rawAscendant)){
     $recovered=(new KundliNormalizer())->normalize($rawPlanetDetails,$rawAscendant);
     if(empty($planetary) && !empty($recovered['planetary_data']) && count($recovered['planetary_data'])>=5){
         $planetary=$recovered['planetary_data'];
     }
-    if(empty($chartData['ascendant']) && !empty($recovered['chart_data']['ascendant'])){
-        $chartData['ascendant']=$recovered['chart_data']['ascendant'];
+    $recoveredAscendant=is_array($recovered['chart_data']['ascendant']??null)?$recovered['chart_data']['ascendant']:[];
+    $recoveredHasDegree=(is_numeric($recoveredAscendant['global_degree']??null)||is_numeric($recoveredAscendant['local_degree']??null));
+    if($recoveredHasDegree){
+        $chartData['ascendant']=$recoveredAscendant;
     }
 }
 
-/* If an older cache still lacks chart_data.ascendant, recover the Ascendant
- * directly from the raw API response so D9 can still be calculated. */
-if(empty($chartData['ascendant']) && $rawAscendant){
+/* If the raw response is usable but the stored/recovered chart still lacks a
+ * degree, make one final normalization pass from the Ascendant response. */
+$storedAscendant=is_array($chartData['ascendant']??null)?$chartData['ascendant']:[];
+$ascendantHasDegree=(is_numeric($storedAscendant['global_degree']??null)||is_numeric($storedAscendant['local_degree']??null));
+if(!$ascendantHasDegree && $rawAscendant){
     $recovered=(new KundliNormalizer())->normalize([], $rawAscendant);
-    if(!empty($recovered['chart_data']['ascendant'])){
-        $chartData['ascendant']=$recovered['chart_data']['ascendant'];
+    $recoveredAscendant=is_array($recovered['chart_data']['ascendant']??null)?$recovered['chart_data']['ascendant']:[];
+    if(is_numeric($recoveredAscendant['global_degree']??null)||is_numeric($recoveredAscendant['local_degree']??null)){
+        $chartData['ascendant']=$recoveredAscendant;
     }
 }
 
