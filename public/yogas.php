@@ -43,17 +43,16 @@ $rawApi=json_decode((string)($calc['api_response']??'{}'),true); if(!is_array($r
 $rawPlanetDetails=is_array($rawApi['planet_details']??null)?$rawApi['planet_details']:[];
 $rawAscendant=is_array($rawApi['ascendant_report']??null)?$rawApi['ascendant_report']:[];
 
-/* Older cached rows may have incomplete chart_data or planetary normalization.
- * Recover missing pieces without replacing valid stored planetary data with an
- * empty/incompatible raw response. */
-$storedAscendant=is_array($chartData['ascendant']??null)?$chartData['ascendant']:[];
-$ascendantHasDegree=(is_numeric($storedAscendant['global_degree']??null)||is_numeric($storedAscendant['local_degree']??null));
-$needsRecovery=empty($storedAscendant)||!$ascendantHasDegree||count($planetary)<5;
-if($needsRecovery && ($rawPlanetDetails||$rawAscendant)){
+/* Always re-normalize the raw API payload when available. Cached planetary_data
+ * can contain the expected number of rows while still carrying stale/incomplete
+ * sign, house, degree, or naming fields. */
+if(($rawPlanetDetails||$rawAscendant)){
     $recovered=(new KundliNormalizer())->normalize($rawPlanetDetails,$rawAscendant);
-    if(empty($planetary) && !empty($recovered['planetary_data']) && count($recovered['planetary_data'])>=5){
-        $planetary=$recovered['planetary_data'];
+    $recoveredPlanetary=is_array($recovered['planetary_data']??null)?$recovered['planetary_data']:[];
+    if(count($recoveredPlanetary)>=5){
+        $planetary=$recoveredPlanetary;
     }
+
     $recoveredAscendant=is_array($recovered['chart_data']['ascendant']??null)?$recovered['chart_data']['ascendant']:[];
     $recoveredHasDegree=(is_numeric($recoveredAscendant['global_degree']??null)||is_numeric($recoveredAscendant['local_degree']??null));
     if($recoveredHasDegree){
@@ -61,8 +60,8 @@ if($needsRecovery && ($rawPlanetDetails||$rawAscendant)){
     }
 }
 
-/* If the raw response is usable but the stored/recovered chart still lacks a
- * degree, make one final normalization pass from the Ascendant response. */
+/* If the combined payload did not expose a usable Ascendant degree, make one
+ * final pass against the Ascendant response alone. */
 $storedAscendant=is_array($chartData['ascendant']??null)?$chartData['ascendant']:[];
 $ascendantHasDegree=(is_numeric($storedAscendant['global_degree']??null)||is_numeric($storedAscendant['local_degree']??null));
 if(!$ascendantHasDegree && $rawAscendant){
