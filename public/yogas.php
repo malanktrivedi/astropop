@@ -4,11 +4,25 @@ require_once __DIR__ . '/../includes/bootstrap.php';
 require_once __DIR__ . '/../includes/NavamsaCalculator.php';
 require_once __DIR__ . '/../includes/YogaDetector.php';
 requireLogin();
-$uid=current_user_id();$profileId=(int)($_GET['profile_id']??0);
-if($profileId<=0){$s=db()->prepare('SELECT id FROM birth_profiles WHERE user_id=? ORDER BY id DESC LIMIT 1');$s->bind_param('i',$uid);$s->execute();$r=$s->get_result()->fetch_assoc();$s->close();$profileId=(int)($r['id']??0);}
-$s=db()->prepare('SELECT id,profile_name,full_name,location_name,birth_place FROM birth_profiles WHERE id=? AND user_id=? LIMIT 1');$s->bind_param('ii',$profileId,$uid);$s->execute();$profile=$s->get_result()->fetch_assoc();$s->close();
-$s=db()->prepare('SELECT id,lagna,rashi,nakshatra,planetary_data,chart_data FROM kundli_calculations WHERE birth_profile_id=? ORDER BY id DESC LIMIT 1');$s->bind_param('i',$profileId);$s->execute();$calc=$s->get_result()->fetch_assoc();$s->close();
+$uid=current_user_id();
+$requestedProfileId=(int)($_GET['profile_id']??0);
+
+/* Resolve a profile together with an actual cached Kundli calculation. The
+ * dashboard can contain a newer birth profile than the calculation row, so
+ * never assume the two independently selected IDs refer to the same chart. */
+$profile=null;$calc=null;
+if($requestedProfileId>0){
+    $s=db()->prepare('SELECT p.id,p.profile_name,p.full_name,p.location_name,p.birth_place,c.id AS calculation_id,c.lagna,c.rashi,c.nakshatra,c.planetary_data,c.chart_data FROM birth_profiles p INNER JOIN kundli_calculations c ON c.birth_profile_id=p.id WHERE p.id=? AND p.user_id=? ORDER BY c.id DESC LIMIT 1');
+    $s->bind_param('ii',$requestedProfileId,$uid);$s->execute();$row=$s->get_result()->fetch_assoc();$s->close();
+    if($row){$profile=$row;$calc=$row;}
+}
+if(!$calc){
+    $s=db()->prepare('SELECT p.id,p.profile_name,p.full_name,p.location_name,p.birth_place,c.id AS calculation_id,c.lagna,c.rashi,c.nakshatra,c.planetary_data,c.chart_data FROM kundli_calculations c INNER JOIN birth_profiles p ON p.id=c.birth_profile_id WHERE c.user_id=? AND p.user_id=? ORDER BY c.id DESC LIMIT 1');
+    $s->bind_param('ii',$uid,$uid);$s->execute();$row=$s->get_result()->fetch_assoc();$s->close();
+    if($row){$profile=$row;$calc=$row;}
+}
 if(!$profile||!$calc){http_response_code(404);exit('Kundli not found. Generate a Kundli first.');}
+$profileId=(int)$profile['id'];
 $planetary=json_decode((string)$calc['planetary_data'],true)?:[];$chartData=json_decode((string)$calc['chart_data'],true)?:[];
 try{$d9=(new NavamsaCalculator())->calculate($planetary,$chartData,(string)$calc['lagna']);$report=(new YogaDetector())->detect($planetary,(string)$calc['lagna'],$d9);$analysisError=null;}catch(Throwable $ex){$d9=['lagna'=>'—'];$report=['lagna'=>$calc['lagna']??'—','yogas'=>[]];$analysisError=$ex->getMessage();}
 function yg(string $v):string{return e($v);}function statusClass(string $s):string{return $s==='Formed'?'pill-success':($s==='Formed but weakened'?'pill':'');}
