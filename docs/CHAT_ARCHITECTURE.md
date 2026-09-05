@@ -2,16 +2,16 @@
 
 ASTROPOP has two distinct chat products:
 
-1. **AI Astrology Chat** — powered by the VedicAstroAPI AI Chat API.
+1. **AI Astrology Chat** — powered by OpenAI through a server-side provider adapter.
 2. **Human Advisor Chat** — an ASTROPOP-owned real-time chat and billing system.
 
 They share the same application chat model, wallet/coin ledger, conversation history and UI primitives, but their providers and billing rules remain separate.
 
 ## 1. AI Astrology Chat
 
-The VedicAstroAPI documentation supplied for the project is the integration source of truth for the AI Chat request/response contract. The public AI Chat product documentation confirms a single POST-style integration, contextual multi-turn conversation support, custom instructions, structured JSON responses, multilingual operation and provider-side usage credits.
+OpenAI is the conversational intelligence provider. VedicAstroAPI remains the astrology calculation/source-data provider for Kundli, planetary positions, Dasha and related deterministic astrology services. ASTROPOP does not ask the LLM to calculate missing astronomical data when authoritative chart data is already available.
 
-The external AI request must be made **server-side only**. The browser must never receive the VedicAstroAPI key.
+The OpenAI request is made **server-side only**. The browser must never receive the OpenAI API key.
 
 ### AI request flow
 
@@ -20,26 +20,32 @@ User message
    -> create/load ASTROPOP AI thread
    -> load saved Kundli from MySQL
    -> build bounded AstrologyChatContext
-   -> include only required conversation history
-   -> call VedicAstroAPI AI Chat endpoint
-   -> persist provider response + usage metadata
+   -> include required conversation history
+   -> call OpenAI Responses API
+   -> persist provider response + token usage metadata
    -> persist assistant message
-   -> optionally debit ASTROPOP coins
+   -> debit ASTROPOP coins after successful response
 ```
 
 The astrology calculation API is not called for every AI message. The AI context comes from the saved Kundli calculation and local deterministic engines.
 
+### Provider boundary
+
+`AiProviderInterface` isolates the application from the LLM provider. `OpenAIChatProvider` currently implements the interface using the OpenAI Responses API over server-side cURL. A future provider can be added without changing the chat UI, wallet, or astrology context layer.
+
 ### AI cost controls
 
-VedicAstroAPI currently describes AI Chat as a credit-metered service and publishes different provider-credit ranges for managed and BYOLLM modes. ASTROPOP must not hard-code those external costs into the user wallet. Instead:
+ASTROPOP customer billing is deliberately separate from OpenAI token billing:
 
-- `ai_chat_usage.provider_credits` records the actual provider-side usage when returned/known.
+- `ai_chat_usage.input_tokens` records OpenAI input tokens when returned.
+- `ai_chat_usage.output_tokens` records OpenAI output tokens when returned.
 - `ai_chat_usage.user_coins_charged` records ASTROPOP's customer price.
-- Pricing can be changed without changing the astrology engine.
-- Failed provider calls must not be treated as successful customer usage.
-- Provider request IDs and response metadata should be retained for reconciliation where available.
+- `wallet_ledger` records the actual customer coin debit.
+- The current MVP price is configurable through `AI_CHAT_COINS_PER_MESSAGE` and defaults to **1 ASTRO_COIN per successful response**.
+- OpenAI provider failures do not count as successful customer usage.
+- Provider response IDs and model metadata are retained for reconciliation.
 
-The exact AI Chat endpoint path and request fields must be implemented from the supplied Postman documentation contract; do not invent undocumented fields.
+The OpenAI model is configured through `OPENAI_MODEL`; the current example defaults to `gpt-5.6-luna`.
 
 ## 2. Human Advisor Chat
 
@@ -131,7 +137,7 @@ The astrology source data and chat application data remain separate. A chat thre
 
 The AI context builder should pass only the minimum astrology facts needed for the question. It should not blindly serialize the complete database record into every prompt.
 
-Conversation history is persisted by ASTROPOP so users can see their history and administrators can audit usage. Provider-specific storage policies must also be respected; VedicAstroAPI's published privacy material says its AI Chat does not persist user chat messages/full conversation history as a persistent record.
+Conversation history is persisted by ASTROPOP so users can see their history and administrators can audit usage. The LLM provider receives only the server-constructed context and conversation history required for the request.
 
 ## 7. Future advisor marketplace
 
